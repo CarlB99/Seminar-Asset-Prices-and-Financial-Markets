@@ -3,24 +3,24 @@ library(tidymodels)
 library(tidyverse)
 library(ggplot2)
 library(RSQLite)
-library(quadprog)
+#library(quadprog)
 library(dplyr)
 library(fPortfolio)
-library(lpSolve)
-library(xts) 
+#library(lpSolve)
+#library(xts) 
 library(gridExtra)
 library(tseries)
 library(R.utils)
 
 ### Data preparation ###
 
-# set working directory
+# Set working directory
 setwd("C:/Users/vilhe/OneDrive/Skrivebord/Seminar - Asset Prices and Financial Markets/Seminar kode")
 
-# get tidy_finance data
+# Get tidy_finance data
 tidy_finance <- dbConnect(SQLite(), "tidy_finance.sqlite", extended_types = TRUE)
 
-# get monthly CRSP returns
+# Get monthly CRSP returns
 crsp_monthly <- tbl(tidy_finance, "crsp_monthly") |> collect()
 dbDisconnect(tidy_finance)
 
@@ -37,18 +37,20 @@ data <- data |>
   ungroup() |>
   dplyr::filter(n == max(n)) |> select(-n)
 
-#Reducing the data to allow faster testing
+# Reducing the sample to allow faster analysis
 unique_stocks <- unique(data$permno)
 set.seed(2023)
 num_stocks_to_select <- 200
 selected_stocks <- sample(unique_stocks, num_stocks_to_select)
 test_data <- data |>
   dplyr::filter(permno %in% selected_stocks)
+
+# Removing unused data
 rm(data)
 rm(crsp_monthly)
 
 
-# Variance-covariance matrix, Sigma, and expected return, mu
+# Constructing returns_matrix to find variance-covariance matrix, Sigma, and expected return, mu
 returns_matrix <- test_data |>
   pivot_wider(
     names_from = permno,
@@ -61,7 +63,8 @@ returns_matrix2 <- test_data |>
     values_from = ret)
 
 
-#VaR and CVaR
+### VaR and CVaR ###
+# Showing VaR and CVaR for a normal distribution
 
 # Define the normal distribution parameters
 mean <- 0
@@ -75,7 +78,7 @@ y <- dnorm(x, mean, sd)
 var_95 <- qnorm(0.05, mean, sd)
 cvar_95 <- mean - sd * dnorm(qnorm(0.05)) / 0.05
 
-# Create the plot
+# Create the plot for the normal distribution with added VaR and CVaR
 plot_data <- data.frame(x, y)
 
 area_data <- subset(plot_data, x <= var_95)
@@ -103,24 +106,24 @@ normal_distribution <- ggplot(plot_data, aes(x, y)) +
   scale_x_continuous(expand = expansion(mult = c(0, 0.05))) + # Set x-axis expansion to start at 0
   labs(x = "Mean", y = "Standard deviation", title = "Normal distribution with VaR and CVaR")  # Set custom labels and title
 
-normal_distribution
 
-
-# Plotting data
+### Descriptive analysis ###
 
 returns_df <- as.data.frame(returns_matrix2)
-returns_df[,1] <- as.Date(returns_df[,1], format = 'your_date_format')
-
+returns_df[,1] <- as.Date(returns_df[,1])
 row_means <- rowMeans(returns_df[, -1])
 cumulated_row_means <- cumsum(row_means)
 row_volatility <- apply(returns_df[, -1], 1, sd)
+
+# Normality test
 jarque_bera_values <- jarque.bera.test(row_means)
+
+# Stationarity test
 adf_test_result <- adf.test(row_means, alternative = "stationary")
 adf_test_result
 
-# Define the number of bins for the histogram
+# Define the number of bins for the sample distribution histogram
 bin_width <- (max(row_means) - min(row_means)) / 20  # adjust 30 to change the number of bins
-
 
 # Prepare the data for plotting
 data_to_plot <- data.frame(Date = returns_df[,1], Average = row_means, Cumulative = cumulated_row_means, Volatility = row_volatility)
@@ -152,6 +155,7 @@ p2 <- ggplot(data_to_plot, aes(x = Date, y = cumulated_row_means)) +
     plot.title = element_text(hjust = 0.5)  # Center the title
   )
 
+# Create plot for average monthly volatility
 p3 <- ggplot(data_to_plot, aes(x = Date, y = Volatility)) +
   geom_line() +
   labs(x = "Year", y = "Volatility", title = "Average volatility") +
@@ -164,7 +168,7 @@ p3 <- ggplot(data_to_plot, aes(x = Date, y = Volatility)) +
     plot.title = element_text(hjust = 0.5)  # Center the title
   )
 
-# Create the histogram plot
+# Create the sample histogram plot
 p4 <- ggplot(data.frame(row_means), aes(x = row_means)) +
   geom_histogram(aes(y = ..density.., fill = 'Sample distribution'), binwidth = bin_width, color = 'black', alpha = 0.5) +
   stat_function(fun = dnorm, args = list(mean = mean(row_means), sd = sd(row_means)), 
@@ -193,13 +197,12 @@ p4 <- ggplot(data.frame(row_means), aes(x = row_means)) +
 # Combine the plots side by side
 grid.arrange(p1, p2, p3, p4, ncol = 2)
 
+### Portfolio optimization using MV and CVaR ###
 
-# Optimization using CVAR
-
-#Transforming data
+# Transforming data and showing effificient frontiers for the MV and CVaR portfolios
 permno_portfolio <- as.timeSeries(returns_matrix2)
-# Settings
-nAssets <- ncol(permno_portfolio)
+
+# Settings and portfolio specifications for the MV portfolio
 mvSpec <- portfolioSpec()
 setRiskFreeRate(mvSpec) <- 0
 setNFrontierPoints(mvSpec) <- 25
@@ -217,6 +220,7 @@ frontierPlot(longFrontier, return = "mu", risk = "CVaR", auto = FALSE, pch = 16,
 #tangencyLines(longFrontier, risk = "Sigma")
 #singleAssetPoints(longFrontier, risk = "Sigma")
 
+# Settings and portfolio specifications for the CVaR portfolio
 longSpec <- portfolioSpec()
 setRiskFreeRate(longSpec) <- 0
 setNFrontierPoints(longSpec) <- 25
@@ -233,6 +237,8 @@ frontierPlot(CVaR_frontier, return ="mu", risk = "CVaR", auto = FALSE, pch = 16,
              type = "b", cex = 0.5, col = c("blue", "red"), add=TRUE)
 #tangencyLines(CVaR_frontier, risk="CVaR")
 
+
+# Backtest of a single portfolio
 num_stocks_to_select_2 <- 50
 selected_stocks_2 <- sample(selected_stocks, num_stocks_to_select_2)
 column_indices <- c("month", selected_stocks_2)
@@ -265,12 +271,14 @@ permnoSmooth <- portfolioSmoothing(object = Backtest_permno, trace = FALSE)
 overall_net_performance <- netPerformance(permnoSmooth)
 backtestPortfolioPlot(permnoSmooth, labels=FALSE, legend=FALSE, at=NULL, format=NULL)
 title(main="CVaR Portfolio vs Benchmark", ylab="Cumulated log return")
-legend("bottomright", # Position of the legend
-       legend = c("CVaR", "Benchmark"), # Text for the legend
-       col = c("red", "blue"), # Colors matching those in the plot
-       lty = c(1, 1), # Line types, assuming both are solid lines
-       cex = 0.8) # Adjust text size as needed
+legend("bottomright", 
+       legend = c("CVaR", "Benchmark"), 
+       col = c("red", "blue"), 
+       lty = c(1, 1), 
+       cex = 0.8) 
 
+
+# Simulated backtest scenarios for multiple portfolios
 num_stocks_to_select_2 <- 50
 num_combinations <- 100
 selected_stocks_combinations <- list()
@@ -280,12 +288,7 @@ for (i in 1:num_combinations) {
   selected_stocks_combinations[[i]] <- selected_stocks_2
 }
 
-# Define the stock ID that you want to remove from combination 5
-
 all_net_performance <- list()
-
-# Loop over each combination to perform backtesting
-# List of indices to skip 
 
 for (i in 1:min(50, length(selected_stocks_combinations))) {
   
@@ -306,7 +309,7 @@ for (i in 1:min(50, length(selected_stocks_combinations))) {
   permno_portfolio <- ts(selected_returns_matrix, start = c(1980, 1), frequency = 12)
   permno_portfolio <- as.timeSeries(permno_portfolio)
   
-  # Define your portfolioSpec and other parameters
+  # Define portfolio specifications
   backtestSpec <- portfolioSpec()
   permnoConstraints <- "LongOnly"
   setAlpha(backtestSpec) <- 0.05
@@ -333,18 +336,16 @@ for (i in 1:min(50, length(selected_stocks_combinations))) {
   cat("Time spent on combination", i, ": ", time_spent, "seconds\n")
 }
 
-
+# Saving the portfolios' net performance change name as needed
 saveRDS(all_net_performance, "CVAR.rds")
 
 
 # Function to process each .rds file
 process_rds_file <- function(file_name) {
-  # Read the .rds file
   list_data <- readRDS(file_name)
-  # Filter out NULL values
   list_data <- Filter(Negate(is.null), list_data)  
   
-  # Initialize vectors to store the totals
+  # Initializing vectors to store the totals
   portfolio_totals <- numeric(length(list_data))
   benchmark_totals <- numeric(length(list_data))
   
@@ -369,13 +370,13 @@ process_rds_file <- function(file_name) {
 file_names <- c("MV 10 assets.rds", "MV 25 assets.rds", "MV 50 assets.rds", "CVaR 10 assets.rds", 
                 "CVaR 25 assets.rds", "CVaR 50 assets.rds")
 
-# Use lapply to process all files
+# Using lapply to process all files at once
 results_backtests <- lapply(file_names, process_rds_file)
 
-# If you want to combine the results into a data frame
+# Combining the results into a single datafram
 results_backtests_df <- do.call(rbind, results_backtests)
 rownames(results_backtests_df) <- file_names
 
-# Print the results data frame
+# Printing the results
 print(results_backtests_df)
 
