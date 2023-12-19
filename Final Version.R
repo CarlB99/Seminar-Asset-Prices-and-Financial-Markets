@@ -3,11 +3,8 @@ library(tidymodels)
 library(tidyverse)
 library(ggplot2)
 library(RSQLite)
-#library(quadprog)
 library(dplyr)
 library(fPortfolio)
-#library(lpSolve)
-#library(xts) 
 library(gridExtra)
 library(tseries)
 library(R.utils)
@@ -92,19 +89,19 @@ normal_distribution <- ggplot(plot_data, aes(x, y)) +
   geom_vline(xintercept = cvar_95, color="black", linetype="dashed") +
   annotate("label", x = cvar_95, y = max(plot_data$y), label = paste("CVaR 95% =", round(cvar_95, 2)), 
            hjust = 1, vjust = 4, color = "black", fill = "white", label.size = NA) +
-  theme_bw() +  # White background with black lines
+  theme_bw() +  
   theme(
-    panel.border = element_rect(colour = "black", fill=NA),  # Black border around the plot
-    panel.grid.major = element_blank(),  # Remove major grid lines
-    panel.grid.minor = element_blank(),  # Remove minor grid lines
-    plot.background = element_blank(),  # Remove background (transparent)
-    legend.position = "none",  # Hide the legend
-    axis.line = element_line(color = "black"),  # Add black axis lines
-    plot.title = element_text(hjust = 0.5)  # Center the title
+    panel.border = element_rect(colour = "black", fill=NA),  
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),  
+    plot.background = element_blank(),  
+    legend.position = "none",  
+    axis.line = element_line(color = "black"),  
+    plot.title = element_text(hjust = 0.5)  
   ) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.05))) + # Set y-axis expansion to start at 0
   scale_x_continuous(expand = expansion(mult = c(0, 0.05))) + # Set x-axis expansion to start at 0
-  labs(x = "Mean", y = "Standard deviation", title = "Normal distribution with VaR and CVaR")  # Set custom labels and title
+  labs(x = "Mean", y = "Standard deviation", title = "Normal distribution with VaR and CVaR")  
 
 
 ### Descriptive analysis ###
@@ -113,7 +110,11 @@ returns_df <- as.data.frame(returns_matrix2)
 returns_df[,1] <- as.Date(returns_df[,1])
 row_means <- rowMeans(returns_df[, -1])
 cumulated_row_means <- cumsum(row_means)
-row_volatility <- apply(returns_df[, -1], 1, sd)
+
+# Permno 46384 is a significant outlier for the volatility in 2014, so it is excluded for clarity in figure
+returns_df_excluding_46834 <- returns_df[, !names(returns_df) %in% "46834"]
+row_volatility <- apply(returns_df_excluding_46834[, -1], 1, sd)
+
 
 # Normality test
 jarque_bera_values <- jarque.bera.test(row_means)
@@ -123,7 +124,7 @@ adf_test_result <- adf.test(row_means, alternative = "stationary")
 adf_test_result
 
 # Define the number of bins for the sample distribution histogram
-bin_width <- (max(row_means) - min(row_means)) / 20  # adjust 30 to change the number of bins
+bin_width <- (max(row_means) - min(row_means)) / 20  
 
 # Prepare the data for plotting
 data_to_plot <- data.frame(Date = returns_df[,1], Average = row_means, Cumulative = cumulated_row_means, Volatility = row_volatility)
@@ -135,11 +136,11 @@ p1 <- ggplot(data_to_plot, aes(x = Date, y = Average)) +
   labs(x = "Year", y = "Log return", title = "Mean monthly return") +
   theme_bw() +
   theme(
-    panel.border = element_rect(colour = "black", fill=NA),  # Black border around the plot
-    panel.grid.major = element_blank(),  # Remove major grid lines
-    panel.grid.minor = element_blank(),  # Remove minor grid lines
-    plot.background = element_blank(),  # Remove background (transparent)
-    plot.title = element_text(hjust = 0.5)  # Center the title
+    panel.border = element_rect(colour = "black", fill=NA),  
+    panel.grid.major = element_blank(),  
+    panel.grid.minor = element_blank(),  
+    plot.background = element_blank(),  
+    plot.title = element_text(hjust = 0.5)  
   )
 
 # Create plot for cumulative mean log returns
@@ -148,11 +149,11 @@ p2 <- ggplot(data_to_plot, aes(x = Date, y = cumulated_row_means)) +
   labs(x = "Year", y = "Log return", title = "Cumulative mean return") +
   theme_bw() +
   theme(
-    panel.border = element_rect(colour = "black", fill=NA),  # Black border around the plot
-    panel.grid.major = element_blank(),  # Remove major grid lines
-    panel.grid.minor = element_blank(),  # Remove minor grid lines
-    plot.background = element_blank(),  # Remove background (transparent)
-    plot.title = element_text(hjust = 0.5)  # Center the title
+    panel.border = element_rect(colour = "black", fill=NA),  
+    panel.grid.major = element_blank(),  
+    panel.grid.minor = element_blank(),  
+    plot.background = element_blank(),  
+    plot.title = element_text(hjust = 0.5)  
   )
 
 # Create plot for average monthly volatility
@@ -161,11 +162,11 @@ p3 <- ggplot(data_to_plot, aes(x = Date, y = Volatility)) +
   labs(x = "Year", y = "Volatility", title = "Average volatility") +
   theme_bw() +
   theme(
-    panel.border = element_rect(colour = "black", fill=NA),  # Black border around the plot
-    panel.grid.major = element_blank(),  # Remove major grid lines
-    panel.grid.minor = element_blank(),  # Remove minor grid lines
-    plot.background = element_blank(),  # Remove background (transparent)
-    plot.title = element_text(hjust = 0.5)  # Center the title
+    panel.border = element_rect(colour = "black", fill=NA),  
+    panel.grid.major = element_blank(),  
+    panel.grid.minor = element_blank(),  
+    plot.background = element_blank(),  
+    plot.title = element_text(hjust = 0.5)  
   )
 
 # Create the sample histogram plot
@@ -183,15 +184,15 @@ p4 <- ggplot(data.frame(row_means), aes(x = row_means)) +
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     plot.background = element_blank(),
-    plot.title = element_text(hjust = 0.5),  # Center the title
-    legend.position = c(0.95, 0.65),  # Place the legend inside the plot at the bottom
-    legend.justification = "right",   # Anchor the legend at the bottom right
-    legend.title = element_blank(),  # Remove the legend title
-    legend.background = element_blank(),  # Transparent legend background
-    legend.key = element_blank(),  # Remove the keys background
-    legend.text = element_text(size = 5),  # Set smaller text size for the legend
-    legend.key.size = unit(0.5, 'lines'),  # Use smaller keys in legend
-    legend.margin = margin(t = 0, r = 0, b = 0, l = 0)  # Remove margin around legend
+    plot.title = element_text(hjust = 0.5),  
+    legend.position = c(0.95, 0.65),  
+    legend.justification = "right",   
+    legend.title = element_blank(),  
+    legend.background = element_blank(),  
+    legend.key = element_blank(),  
+    legend.text = element_text(size = 5),  
+    legend.key.size = unit(0.5, 'lines'),  
+    legend.margin = margin(t = 0, r = 0, b = 0, l = 0)  
   )
 
 # Combine the plots side by side
@@ -339,6 +340,7 @@ for (i in 1:min(50, length(selected_stocks_combinations))) {
 # Saving the portfolios' net performance change name as needed
 saveRDS(all_net_performance, "CVAR.rds")
 
+### Creating a table for the average simulated total
 
 # Function to process each .rds file
 process_rds_file <- function(file_name) {
@@ -380,3 +382,116 @@ rownames(results_backtests_df) <- file_names
 # Printing the results
 print(results_backtests_df)
 
+
+### Creating a plot for the distribution of the individual simulated totals
+
+# New function to extract totals from each .rds file
+extract_totals <- function(file_name) {
+  list_data <- readRDS(file_name)
+  list_data <- Filter(Negate(is.null), list_data)
+  
+  # Vectors to store the individual totals for each period
+  portfolio_totals <- numeric(length(list_data))
+  benchmark_totals <- numeric(length(list_data))
+  
+  # Loop through the list and extract the Total for Portfolio and Benchmark
+  for (i in seq_along(list_data)) {
+    if (!is.null(list_data[[i]])) {
+      portfolio_totals[i] <- list_data[[i]][1, ncol(list_data[[i]])]
+      benchmark_totals[i] <- list_data[[i]][2, ncol(list_data[[i]])]
+    }
+  }
+  
+  # Return a dataframe with portfolio and benchmark totals for each period
+  return(data.frame(portfolio_totals, benchmark_totals))
+}
+
+# Create an empty list to store the dataframes
+all_totals <- list()
+
+# Loop through each file name and apply the function
+for (file in file_names) {
+  all_totals[[file]] <- extract_totals(file)
+}
+
+# Create a new dataframe to hold all totals
+combined_totals_df <- data.frame(matrix(nrow = length(all_totals[[1]]$portfolio_totals), ncol = 0))
+
+# Column names for the new dataframe
+column_names <- c()
+
+# Loop through each list element in 'all_totals' and bind the columns to the new dataframe
+for (file in file_names) {
+  # Get the dataframe from the list
+  df <- all_totals[[file]]
+  
+  # Create unique column names for this file
+  portfolio_col_name <- paste0(file, "_portfolio_totals")
+  benchmark_col_name <- paste0(file, "_benchmark_totals")
+  
+  # Add these columns to 'combined_totals_df'
+  combined_totals_df <- cbind(combined_totals_df, df)
+  
+  # Keep track of the new column names
+  column_names <- c(column_names, portfolio_col_name, benchmark_col_name)
+}
+
+# Set the column names of the new dataframe
+colnames(combined_totals_df) <- column_names
+
+# Initialize an empty data frame
+differences_df <- data.frame(matrix(ncol = 0, nrow = nrow(combined_totals_df)))
+
+# Loop through the combined_totals_df to calculate differences
+for (i in seq(1, ncol(combined_totals_df), by = 2)) {
+  portfolio_col_name <- names(combined_totals_df)[i]
+  benchmark_col_name <- names(combined_totals_df)[i + 1]
+  
+  # Create the descriptive name for the difference column
+  descriptive_name <- paste0(gsub(".rds_portfolio_totals", " portfolio", portfolio_col_name), 
+                             " vs ", 
+                             gsub(".rds_benchmark_totals", " benchmark", benchmark_col_name))
+  
+  # Calculate the difference and add it to the differences_df
+  differences_df[[descriptive_name]] <- combined_totals_df[[i]] - combined_totals_df[[i + 1]]
+}
+
+# Adding an index column for plotting
+differences_df <- differences_df |>
+  mutate(Observation = row_number())
+
+# Add an observation column to the dataframe
+differences_df$Observation <- seq_len(nrow(differences_df))
+
+# Convert the data to long format
+long_format <- differences_df %>%
+  gather(key = "Comparison", value = "Difference", -Observation)
+
+# Plot order
+comparison_order <- c("MV-portfolio 10 assets", "CVaR-portfolio 10 assets",
+                      "MV-portfolio 25 assets", "CVaR-portfolio 25 assets",
+                      "MV-portfolio 50 assets", "CVaR-portfolio 50 assets")
+
+# Update the comparison titles for the plot
+long_format <- long_format |>
+  mutate(Comparison = factor(sub("(MV|CVaR) (\\d+) assets portfolio vs (MV|CVaR) (\\d+) assets benchmark", "\\1-portfolio \\2 assets", Comparison),
+                             levels = comparison_order))
+
+# Create a boxplot
+ggplot(long_format, aes(x = Comparison, y = Difference)) +
+  geom_boxplot(colour="black", fill="#AED6F1") + 
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") + 
+  theme_bw() + 
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text = element_text(color="black"), 
+    axis.title = element_text(color="black"), 
+    panel.grid.major = element_line(color = "grey80"), 
+    panel.grid.minor = element_blank(), 
+    panel.background = element_blank(), 
+    legend.position = "none" 
+  ) +
+  labs(title = "Optimized portfolio performances vs benchmark",
+       x = "Portfolio type",
+       y = "Difference with benchmark")
